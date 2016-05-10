@@ -1,5 +1,7 @@
 # Wm-with-opencv
+
 build with opencv 3.1.0
+
 the watermark algorithms :
  1, scambler the watermark image with pseudo-random Pemutation
  2, binary the scambler watermark
