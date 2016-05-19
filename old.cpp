@@ -123,7 +123,7 @@ inline vector<int> generator(int a,int b)
   }
   return myvector;
 }
-// calculate SMSE, PSNR
+// calculate SMRE, PSNR
 float calRms(Mat originIMG, Mat wmIMG)
 {
 	float e;
@@ -156,22 +156,12 @@ float calSnr(Mat originIMG, Mat wmIMG)
 	s = b / a;
 	return s;
 }
-// find index of value in map
-int indexof(vector<int> A,int a){
-	for (int i = 0; i < A.size(); ++i)
-	{
-		if (A[i]==a)
-		{
-			return i;
-			break;
-		}
-	}
-}
+
 /***************************************process watermark********************************************************/
 vector<int> convertTo_binary(char src[100]){
 	Mat img = imread(src,0);
 	vector<int> convert;
-	int blocks = img.cols/8;
+	int blocks = img.cols/8; // blocks means number of block in cols
 	vector<Mat_<uchar>> vectorBlock = decoupage(img);
 	Mat create(8,8,CV_8UC1,Scalar::all(0));
 	vector<Mat_<uchar>> scramvectorBlock(blocks*blocks,create);
@@ -184,12 +174,13 @@ vector<int> convertTo_binary(char src[100]){
 	Mat wmIMG = idecoupage(scramvectorBlock,img.size(), img.channels());
 	namedWindow("after",WINDOW_AUTOSIZE);
 	imshow("after",wmIMG);
+	imwrite("scramble.jpg",wmIMG);
 	waitKey(0);
-	for (int i = 0; i < img.rows; ++i)
+	for (int i = 0; i < wmIMG.rows; ++i)
 	{	
-		for (int j = 0; j < img.cols; ++j)
+		for (int j = 0; j < wmIMG.cols; ++j)
 		{
-			if (img.at<uchar>(i,j) > 100)
+			if (wmIMG.at<uchar>(i,j) > 100)
 			{
 				convert.push_back(1);
 			}else
@@ -210,31 +201,41 @@ int main()
 		return -1;
 	}
 	Mat imgcopy = originIMG.clone();
-	float wmscalor = 0;// the watermark scalor
-	int a = originIMG.rows / 8 + 1;
-	int b = originIMG.cols / 8 + 1;
-	int cpb = (vectorwm.size())/((a-1)*(b-1)); // coeff per block
+	float wmscalor = 1.5;// the watermark scalor
+	int a = originIMG.rows /8 +1;
+	int b = originIMG.cols /8 +1;
+	int blocks = (originIMG.rows/8)*(originIMG.cols/8);
 	Mat wmIMG;
 	int flag=0;
 	//make border of watermark img
 	copyMakeBorder(originIMG, wmIMG, 0, 8*a - originIMG.rows, 0, 8*b - originIMG.cols, BORDER_CONSTANT, Scalar::all(0));
 	//read per block
-	for (int i = 0; i < a-1; i++)
+	for (int i = 0;flag < vectorwm.size(); i++)
 	{
 		for (int j = 0; j <b-1; j++)
 		{
 			Mat img(8, 8, CV_32FC1);
 			//read 1 block
-			for (int r = i * 8, f = 0; r < i * 8 + 8, f < 8; r++, f++)
+			if (i<a-1)
 			{
-				for (int t = j * 8, g = 0; t < j * 8 + 8, g < 8; t++, g++)
+				for (int r = i * 8, f = 0; r < i * 8 + 8, f < 8; r++, f++)
 				{
-					img.at<float>(f, g) = wmIMG.at<uchar>(r, t);
+					for (int t = j * 8, g = 0; t < j * 8 + 8, g < 8; t++, g++)
+					{
+						img.at<float>(f, g) = wmIMG.at<uchar>(r, t);
+					}
 				}
+			}else{
+				for (int r = (i-a-1) * 8, f = 0; r < (i-a-1) * 8 + 8, f < 8; r++, f++)
+				{
+					for (int t = j * 8, g = 0; t < j * 8 + 8, g < 8; t++, g++)
+					{
+						img.at<float>(f, g) = wmIMG.at<uchar>(r, t);
+					}
+				}	
 			}
 			dct(img-128, img); //dct
 			//Quantum with K =90
-			cout << "MAT_AFTER izigzag = " << ' ' << img << endl;
 			Mat_<int> Matquantum(8,8,CV_32FC1);
 			Mat Q = (Mat_<float>(8,8)<<  3,2,2,3,5,8,10,12,2,2,3,4,5,12,12,11,3,3,3,5,8,11,14,11,3,3,4,6,10,17,16,12,4,4,7,11,14,22,21,15,5,7,11,13,16,12,23,18,10,13,16,17,21,24,24,21,14,18,19,20,22,20,20,20);				
 			for (int i = 0; i < 8; ++i)
@@ -245,55 +246,44 @@ int main()
 				}
 			}
 			//zigzag scan 
-			vector<int> v;
-			v = zigzag(Matquantum);
-			vector<float> v_float(64,0);
+			vector<int> v1;
+			v1 = zigzag(Matquantum);
+			vector<float> v(64,0);
 			for (int i = 0; i < 64; ++i)
 			{
-				v_float.at(i) = v.at(j);
+				v[i] = v1[i];
 			}
 			//embeded watermark
-			/*int x,y;
-		  	for (x=6,y =7; x <6+2*cpb,y<7+2*cpb; x+=2,y+=2,flag++)
-			{
+			int x=6+2*(flag/blocks),y = 7+2*(flag/blocks);
 				if(vectorwm.at(flag)==1)
 				{
-					if (v_float[x]>v_float[y])
+					if (v[x]>v[y])
 					{
-						swap(v_float[x],v_float[y]);
+						swap(v[x],v[y]);
 						
 					}
-					if (v_float[x]==v_float[y])
+					if (v[x]==v[y])
 					{
-						v_float[y]=v_float[y]+wmscalor;
-						printf("change at %d %d\n",x,y );
+						v[y]=+wmscalor;
 					}
 				}
 				if(vectorwm.at(flag)==0)
 				{
-					if(v_float[x]<v_float[y])
+					if(v[x]<v[y])
 					{
-						swap(v_float[x],v_float[y]);
+						swap(v[x],v[y]);
 					}
-					if (v_float[x]==v_float[y])
+					if (v[x]==v[y])
 					{
-						v_float[x]=v_float[x]+wmscalor;
-						printf("change at %d %d\n",x,y );
+						v[x]=v[x]+wmscalor;
 					}
 				}
-			}*/
-			for (int i = 0; i < 64; ++i)
-			{
-				cout << v_float[i] << ' ';
-			}
-			cout << endl;
-				//izigzag
+			//izigzag
 			Mat multiquantum;
 			multiquantum.create(8,8,CV_32FC1);
 			Mat temp;
 			temp.create(8,8,CV_32FC1);
-			temp = izigzag(v_float);
-			cout << "MAT_AFTER izigzag = " << ' ' << temp << endl;
+			temp = izigzag(v);
 			//dequantum
 			for (int i = 0; i < 8; ++i)
 			{	
@@ -302,7 +292,6 @@ int main()
 					multiquantum.at<float>(i,j) = temp.at<float>(i,j) * Q.at<float>(i,j);
 				}
 			}
-			cout << "MAT_AFTER dequantum = " << ' ' << multiquantum << endl;	
 			idct(multiquantum, img);//idct
 			//big 128
 			for (int r = i * 8, f = 0; r < i * 8 + 8, f < 8; r++, f++)
@@ -312,6 +301,7 @@ int main()
 					wmIMG.at<uchar>(r, t) = img.at<float>(f, g) +128;
 				}
 			}
+			flag++;
 		}
 	}
 	// watermarkIMG with true size
@@ -323,14 +313,15 @@ int main()
 		}
 	}
 	Mat img5 = imread("lena.jpg", 0);
-	float e = calRms(img5, imgcopy);
-	float s = calSnr(img5, imgcopy);
+	imwrite("watermark.jpg",imgcopy);
+	float e = calRms(img5, wmIMG);
+	float s = calSnr(img5, wmIMG);
 	cout << "**********" << endl;
 	cout << "RMSE=" << e << endl;
 	cout << "SNR=" << s << endl;
 	cout << "**********" << endl;
 	imshow("source image", img5);
-	imshow("transform", imgcopy);
+	imshow("watermark", imgcopy);
 	waitKey();
 	return 0;
 }
